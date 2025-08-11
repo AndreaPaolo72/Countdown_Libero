@@ -1,12 +1,328 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<title>Countdown Evento</title>
-<!-- Codice abbreviato per esempio: in pratica qui metteremmo l'intero HTML che avevamo generato prima -->
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Countdown Evento</title>
+  <style>
+    :root{
+      --bg1:#0b1020; --bg2:#0f172a;
+      --card:#111827; --text:#e9eef6; --muted:#9aa3af;
+      --accent:#22d3ee; --accent2:#60a5fa;
+      --live1:#15100b; --live2:#1e160c;
+      --live-accent:#f0b84b; --live-accent2:#f59e0b;
+      --tile-radius:14px;
+      --tile-pad:12px;
+      --shadow: 0 20px 60px rgba(0,0,0,.45);
+      --fade-dur: 220ms;
+    }
+
+    *{box-sizing:border-box}
+    html,body{height:100%;width:100%}
+    html{ -webkit-text-size-adjust:100%; }
+    body{
+      margin:0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      color:var(--text);
+      min-height:100vh; overflow-x:hidden;
+      display:flex; align-items:center; justify-content:center;
+      padding:16px env(safe-area-inset-right) calc(16px + env(safe-area-inset-bottom)) env(safe-area-inset-left);
+      background:
+        radial-gradient(900px 500px at 0% 0%, rgba(34,211,238,.10), transparent 60%),
+        radial-gradient(900px 500px at 100% 10%, rgba(96,165,250,.10), transparent 60%),
+        linear-gradient(180deg, var(--bg1), var(--bg2));
+      transition: background 400ms ease;
+    }
+
+    body.after{
+      background:
+        radial-gradient(900px 520px at 10% -10%, rgba(240,184,75,.09), transparent 70%),
+        radial-gradient(900px 520px at 90% 0%, rgba(245,158,11,.09), transparent 70%),
+        linear-gradient(180deg, var(--live1), var(--live2));
+    }
+
+    /* Glow sobrio (rispetta prefers-reduced-motion) */
+    .glow{ position:fixed; inset:-20%; pointer-events:none; z-index:-1; }
+    .gl1,.gl2{ position:absolute; width:60vmax; height:60vmax; filter:blur(60px); opacity:.14; border-radius:50%; }
+    .gl1{ background: radial-gradient(closest-side, var(--accent), transparent); left:-10%; top:-10%; animation: drift 18s ease-in-out infinite alternate; }
+    .gl2{ background: radial-gradient(closest-side, var(--accent2), transparent); right:-10%; top:10%; animation: drift2 22s ease-in-out infinite alternate; }
+    body.after .gl1{ background: radial-gradient(closest-side, var(--live-accent), transparent); }
+    body.after .gl2{ background: radial-gradient(closest-side, var(--live-accent2), transparent); }
+
+    @keyframes drift{ from{transform:translateY(0)} to{transform:translateY(5%)} }
+    @keyframes drift2{ from{transform:translateY(0)} to{transform:translateY(-6%)} }
+    @media (prefers-reduced-motion: reduce){
+      .gl1,.gl2{ animation:none; }
+    }
+
+    .wrap{ width:100%; max-width: 780px; margin:0 auto; text-align:center; }
+    h1{ margin:0 0 8px 0; font-weight:800; line-height:1.15; font-size: clamp(1.25rem, 5vw, 2rem); }
+    .subtitle{ color:var(--muted); font-size: clamp(.95rem, 3vw, 1.05rem); }
+
+    .timer{
+      display:grid; gap:12px; margin-top:18px;
+      grid-template-columns: repeat( auto-fit, minmax(92px, 1fr) );
+      place-content: center;
+    }
+    .tile{
+      background:var(--card); border-radius:var(--tile-radius); padding:var(--tile-pad);
+      box-shadow: inset 0 -16px 28px rgba(255,255,255,.02);
+      transition: opacity var(--fade-dur) ease, transform var(--fade-dur) ease;
+    }
+    .tile.hidden{ display:none; }
+    .num{
+      font-variant-numeric: tabular-nums; font-weight:800; line-height:1; text-align:center;
+      font-size: clamp(1.4rem, 7vw, 2.2rem); display:block;
+    }
+    /* fissiamo una larghezza minima per evitare micro-shift */
+    #years.num{ min-width: 2.2ch; }
+    #days.num{ min-width: 3.2ch; }
+    #hours.num,#minutes.num,#seconds.num{ min-width: 2.6ch; }
+
+    .label{ text-transform:uppercase; letter-spacing:.12em; color:var(--muted); font-size:.72rem; margin-top:6px; }
+    .when{ margin-top:16px; color:var(--muted); font-size: clamp(.95rem, 3vw, 1.05rem); }
+
+    /* Palette after-event sobria */
+    body.after .tile{ background: rgba(255,255,255,.06); }
+    body.after .label{ color:#d7c7a6; }
+    body.after .subtitle{ color:#d7c7a6; }
+    body.after .when{ color:#e9d9b9; }
+
+    .gear-btn{
+      margin-top:14px; cursor:pointer; color:#cfe9ff; display:inline-block;
+      background: rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.12);
+      padding:8px 12px; border-radius:12px;
+    }
+    body.after .gear-btn{ color:#fff6e2; background: rgba(255,236,200,.08); border-color: rgba(255,236,200,.16); }
+
+    /* Overlay impostazioni */
+    .overlay{ position:fixed; inset:0; display:none; align-items:center; justify-content:center;
+      background:rgba(0,0,0,.55); padding:16px; }
+    .overlay.open{ display:flex; }
+    .panel{
+      width:min(520px, 96vw); background:#0f172a; color:#e5e7eb;
+      border:1px solid rgba(255,255,255,.12); border-radius:16px; padding:16px; box-shadow: var(--shadow);
+    }
+    .panel h2{ margin:0 0 10px 0; font-size:1.1rem; }
+    .row{ display:grid; gap:10px; grid-template-columns:1fr; }
+    label{ font-size:.8rem; color:#9ca3af; }
+    input[type="text"], input[type="datetime-local"]{
+      width:100%; padding:10px; border-radius:12px; border:1px solid rgba(255,255,255,.15);
+      background:#0b1220; color:#e5e7eb; font-size:1rem; outline:none;
+    }
+    .btns{ display:flex; gap:8px; justify-content:flex-end; margin-top:12px; }
+    button{ cursor:pointer; border:0; border-radius:10px; padding:10px 12px; font-weight:700; }
+    .primary{ background:linear-gradient(90deg, var(--accent), var(--accent2)); color:#041019; }
+    .ghost{ background:rgba(255,255,255,.08); color:#e5e7eb; }
+    .danger{ background:#f87171; color:#1a0a0a; margin-right:auto; }
+
+    .liveBanner{
+      margin-top: 14px;
+      font-weight: 800;
+      letter-spacing: .02em;
+      display:none;
+      color: #ffe8b3;
+    }
+    body.after .liveBanner{ display:block; }
+  </style>
 </head>
 <body>
-<p>Qui andrebbe l'intero codice HTML dell'ultima versione del countdown con sparizione caselle ed evento in corso.</p>
+  <div class="glow" aria-hidden="true">
+    <div class="gl1"></div>
+    <div class="gl2"></div>
+  </div>
+
+  <main class="wrap" aria-live="polite">
+    <h1 id="title">Countdown Evento</h1>
+    <div class="subtitle" id="subtitle">Imposta nome e data/ora con ⚙︎</div>
+
+    <!-- Prima dell'evento: tempo rimanente. Dopo: tempo trascorso -->
+    <section class="timer" id="timerRemain">
+      <div class="tile" data-unit="years"><span class="num" id="years">—</span><div class="label">Anni</div></div>
+      <div class="tile" data-unit="days"><span class="num" id="days">—</span><div class="label">Giorni</div></div>
+      <div class="tile" data-unit="hours"><span class="num" id="hours">—</span><div class="label">Ore</div></div>
+      <div class="tile" data-unit="minutes"><span class="num" id="minutes">—</span><div class="label">Minuti</div></div>
+      <div class="tile" data-unit="seconds"><span class="num" id="seconds">—</span><div class="label">Secondi</div></div>
+    </section>
+
+    <div class="liveBanner" id="liveBanner">Evento in corso</div>
+
+    <section class="timer" id="timerElapsed" style="display:none;">
+      <div class="tile" data-unit="years-e"><span class="num" id="yearsE">—</span><div class="label">Anni</div></div>
+      <div class="tile" data-unit="days-e"><span class="num" id="daysE">—</span><div class="label">Giorni</div></div>
+      <div class="tile" data-unit="hours-e"><span class="num" id="hoursE">—</span><div class="label">Ore</div></div>
+      <div class="tile" data-unit="minutes-e"><span class="num" id="minutesE">—</span><div class="label">Minuti</div></div>
+      <div class="tile" data-unit="seconds-e"><span class="num" id="secondsE">—</span><div class="label">Secondi</div></div>
+    </section>
+
+    <div class="when" id="when">Nessun evento impostato.</div>
+    <div class="gear-btn" id="openSettings">⚙︎ Imposta</div>
+  </main>
+
+  <!-- Overlay impostazioni -->
+  <div class="overlay" id="overlay">
+    <div class="panel">
+      <h2>Impostazioni evento</h2>
+      <div class="row" style="margin-bottom:8px;">
+        <div>
+          <label for="name">Nome evento</label>
+          <input id="name" type="text" placeholder="Es: Lancio prodotto Valgrana" />
+        </div>
+        <div>
+          <label for="date">Data e ora (locale)</label>
+          <input id="date" type="datetime-local" />
+        </div>
+      </div>
+      <div class="btns">
+        <button class="danger" id="reset">Reset</button>
+        <button class="ghost" id="cancel">Annulla</button>
+        <button class="primary" id="save">Salva</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'countdown:event:v4';
+    const $ = id => document.getElementById(id);
+    const fmt2 = n => String(Math.floor(Math.max(0,n))).padStart(2,'0');
+
+    function addYears(date, years){
+      const d = new Date(date.getTime());
+      const m = d.getMonth();
+      d.setFullYear(d.getFullYear()+years);
+      if (d.getMonth() !== m) d.setDate(0);
+      return d;
+    }
+
+    function diffComponents(from,to){
+      let sign=1; if(to<from){ sign=-1; [from,to]=[to,from]; }
+      let years=0; while(true){
+        const next=addYears(from, years+1);
+        if(next<=to) years++; else break;
+        if(years>200) break;
+      }
+      const afterYears=addYears(from, years);
+      let rem = to - afterYears, dayMs=864e5;
+      const days = Math.floor(rem/dayMs); rem -= days*dayMs;
+      const hours = Math.floor(rem/36e5); rem -= hours*36e5;
+      const minutes = Math.floor(rem/6e4); rem -= minutes*6e4;
+      const seconds = Math.floor(rem/1e3);
+      return {years,days,hours,minutes,seconds,sign};
+    }
+
+    function loadState(){
+      try { const j = localStorage.getItem(STORAGE_KEY); return j? JSON.parse(j): null; }
+      catch(e){ return null; }
+    }
+    function saveState(name, iso){
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ name, iso }));
+    }
+    function clearState(){ localStorage.removeItem(STORAGE_KEY); }
+
+    function updateTilesVisibility(prefix, vals){
+      const units = prefix === 'E'
+        ? [['yearsE','years-e','years'],['daysE','days-e','days'],['hoursE','hours-e','hours'],['minutesE','minutes-e','minutes'],['secondsE','seconds-e','seconds']]
+        : [['years','years','years'],['days','days','days'],['hours','hours','hours'],['minutes','minutes','minutes'],['seconds','seconds','seconds']];
+      units.forEach(([id, dataAttr, key]) => {
+        const tile = document.querySelector(`[data-unit='${dataAttr}']`);
+        if(!tile) return;
+        if(vals[key] > 0){ tile.classList.remove('hidden'); } else { tile.classList.add('hidden'); }
+      });
+    }
+
+    function hydrateUI(){
+      const st = loadState();
+      if(st){
+        $('title').textContent = st.name || 'Evento';
+        const d = new Date(st.iso);
+        if(!isNaN(d)){
+          $('subtitle').textContent = '';
+          $('when').textContent = 'Inizio: ' + d.toLocaleString();
+        } else {
+          $('when').textContent = 'Data non valida: apri ⚙︎ e salva di nuovo.';
+        }
+      } else {
+        $('title').textContent = 'Countdown Evento';
+        $('subtitle').textContent = 'Imposta nome e data/ora con ⚙︎';
+        $('when').textContent = 'Nessun evento impostato.';
+      }
+    }
+
+    function render(){
+      const st = loadState();
+      if(!st){
+        ['years','days','hours','minutes','seconds'].forEach(id => $(id).textContent='—');
+        return;
+      }
+      const target = new Date(st.iso);
+      const now = new Date();
+      const diff = diffComponents(now, target);
+
+      if(diff.sign > 0){
+        document.body.classList.remove('after');
+        document.getElementById('timerRemain').style.display = '';
+        document.getElementById('timerElapsed').style.display = 'none';
+        document.getElementById('liveBanner').style.display = 'none';
+
+        document.getElementById('years').textContent = diff.years;
+        document.getElementById('days').textContent = diff.days;
+        document.getElementById('hours').textContent = fmt2(diff.hours);
+        document.getElementById('minutes').textContent = fmt2(diff.minutes);
+        document.getElementById('seconds').textContent = fmt2(diff.seconds);
+
+        updateTilesVisibility('', diff);
+        document.title = `${st.name} — ${diff.years}a ${diff.days}g ${fmt2(diff.hours)}:${fmt2(diff.minutes)}:${fmt2(diff.seconds)}`;
+      } else {
+        document.body.classList.add('after');
+        document.getElementById('timerRemain').style.display = 'none';
+        document.getElementById('timerElapsed').style.display = '';
+        document.getElementById('liveBanner').style.display = '';
+
+        const elapsed = diffComponents(target, now);
+        document.getElementById('yearsE').textContent = elapsed.years;
+        document.getElementById('daysE').textContent = elapsed.days;
+        document.getElementById('hoursE').textContent = fmt2(elapsed.hours);
+        document.getElementById('minutesE').textContent = fmt2(elapsed.minutes);
+        document.getElementById('secondsE').textContent = fmt2(elapsed.seconds);
+
+        updateTilesVisibility('E', elapsed);
+        document.title = `${st.name} — in corso • +${elapsed.years}a ${elapsed.days}g ${fmt2(elapsed.hours)}:${fmt2(elapsed.minutes)}:${fmt2(elapsed.seconds)}`;
+      }
+    }
+
+    function openPanel(){
+      const st = loadState();
+      if(st){
+        document.getElementById('name').value = st.name || '';
+        const d = new Date(st.iso);
+        if(!isNaN(d)){
+          const pad = n => String(n).padStart(2,'0');
+          document.getElementById('date').value = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        }
+      }
+      document.getElementById('overlay').classList.add('open');
+    }
+    function closePanel(){ document.getElementById('overlay').classList.remove('open'); }
+
+    document.getElementById('openSettings').addEventListener('click', openPanel);
+    document.getElementById('cancel').addEventListener('click', closePanel);
+    document.getElementById('reset').addEventListener('click', () => {
+      if(confirm('Cancellare nome e data salvati?')){
+        clearState(); closePanel(); hydrateUI(); render();
+      }
+    });
+    document.getElementById('save').addEventListener('click', () => {
+      const name = (document.getElementById('name').value||'').trim();
+      const v = document.getElementById('date').value;
+      if(!name){ alert('Inserisci il nome evento.'); return; }
+      if(!v){ alert('Scegli data e ora.'); return; }
+      const d = new Date(v);
+      if(isNaN(d)){ alert('Data/ora non valida.'); return; }
+      saveState(name, d.toISOString());
+      closePanel(); hydrateUI(); render();
+    });
+
+    hydrateUI(); render();
+    setInterval(render, 1000);
+  </script>
 </body>
 </html>
